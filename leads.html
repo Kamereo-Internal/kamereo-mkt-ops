@@ -1,91 +1,171 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="vi">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Leads Module</title>
   <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      margin: 40px;
-    }
-    h1 {
-      margin-bottom: 8px;
-    }
-    .status {
-      margin-bottom: 20px;
-      font-weight: 600;
-    }
-    .ok {
-      color: #0a7a2f;
-    }
-    .not-ok {
-      color: #b00020;
-    }
-    pre {
-      background: #f5f5f5;
-      padding: 16px;
-      border-radius: 6px;
-      max-height: 600px;
-      overflow: auto;
-      font-size: 13px;
-      line-height: 1.4;
-    }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px;background:#fff;color:#111}
+    h1{margin:0 0 12px;font-size:40px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0 16px}
+    .pill{padding:8px 10px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
+    .btn{padding:10px 12px;border:1px solid #111;border-radius:10px;background:#111;color:#fff;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .status{font-weight:700}
+    .ok{color:#0a7a2f}
+    .bad{color:#b00020}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;margin:16px 0}
+    .card{border:1px solid #e5e7eb;border-radius:14px;padding:14px;background:#fafafa}
+    .label{font-size:12px;color:#555;margin-bottom:6px}
+    .value{font-size:26px;font-weight:800}
+    .box{border:1px solid #e5e7eb;border-radius:14px;background:#fff;padding:14px;margin:12px 0}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+    th{color:#444;font-weight:700}
+    pre{white-space:pre-wrap;word-break:break-word}
+    @media (max-width: 900px){.grid{grid-template-columns:repeat(2,minmax(160px,1fr))}}
   </style>
 </head>
 <body>
   <h1>Leads Module</h1>
-  <div id="status" class="status">API status: checking…</div>
-  <pre id="output"></pre>
 
-  <script>
-    // ===== CONFIG – KHÔNG SỬA NGOÀI 2 DÒNG NÀY =====
-    const API_BASE = "https://weathered-credit-61cd.huy-ngo.workers.dev/";
-    const TOKEN = "kmr_mkt_ops_2025_secret_x9a3";
-    // ==============================================
+  <div class="row">
+    <div class="pill">API status: <span id="apiStatus" class="status">...</span></div>
 
-    async function loadData() {
-      const statusEl = document.getElementById("status");
-      const outputEl = document.getElementById("output");
+    <label class="pill">Region:
+      <select id="region">
+        <option>All</option>
+        <option>South</option>
+        <option>North</option>
+        <option>Other</option>
+      </select>
+    </label>
 
-      const url =
-        API_BASE +
-        "?action=getLeadFunnel" +
-        "&token=" + encodeURIComponent(TOKEN) +
-        "&_=" + Date.now(); // cache-bust
+    <label class="pill">daysOverdue:
+      <input id="daysOverdue" type="number" min="0" value="1" style="width:80px" />
+    </label>
 
-      try {
-        const res = await fetch(url, { method: "GET" });
+    <button id="btnReload" class="btn">Reload</button>
+  </div>
 
-        const text = await res.text();
+  <div class="grid">
+    <div class="card">
+      <div class="label">Total leads</div>
+      <div class="value" id="kpiTotal">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Overdue</div>
+      <div class="value" id="kpiOverdue">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Active customer</div>
+      <div class="value" id="kpiActive">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Sale Verify</div>
+      <div class="value" id="kpiSaleVerify">—</div>
+    </div>
+  </div>
 
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          statusEl.textContent = "API status: OK (non-JSON)";
-          statusEl.className = "status ok";
-          outputEl.textContent = text;
-          return;
-        }
+  <div class="box">
+    <h2 style="margin:0 0 10px">By Status</h2>
+    <div id="tblStatus"></div>
+  </div>
 
-        if (data && data.ok === true) {
-          statusEl.textContent = "API status: OK";
-          statusEl.className = "status ok";
-        } else {
-          statusEl.textContent = "API status: NOT OK";
-          statusEl.className = "status not-ok";
-        }
+  <div class="box">
+    <h2 style="margin:0 0 10px">By Source</h2>
+    <div id="tblSource"></div>
+  </div>
 
-        outputEl.textContent = JSON.stringify(data, null, 2);
+  <div class="box">
+    <h2 style="margin:0 0 10px">Debug raw JSON</h2>
+    <pre id="raw">—</pre>
+  </div>
 
-      } catch (err) {
-        statusEl.textContent = "API status: ERROR";
-        statusEl.className = "status not-ok";
-        outputEl.textContent = err.toString();
+<script>
+  // ====== CONFIG: update these 2 lines only ======
+  const WORKER_BASE = "https://weathered-credit-61cd.huy-ngo.workers.dev"; // no trailing slash required
+  const TOKEN = "kmr_mkt_ops_2025_secret_x9a3";
+  // ==============================================
+
+  const $ = (id) => document.getElementById(id);
+
+  function qs(obj){
+    const u = new URLSearchParams();
+    for (const [k,v] of Object.entries(obj)) u.set(k, v);
+    return u.toString();
+  }
+
+  function fmt(n){
+    if (n === null || n === undefined) return "—";
+    return Number(n).toLocaleString("en-US");
+  }
+
+  function dictToRows(d){
+    const entries = Object.entries(d || {}).sort((a,b)=> (b[1]||0)-(a[1]||0));
+    const rows = entries.map(([k,v]) => `<tr><td>${escapeHtml(k)}</td><td>${fmt(v)}</td></tr>`).join("");
+    return `
+      <table>
+        <thead><tr><th>Label</th><th>Count</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="2">No data</td></tr>`}</tbody>
+      </table>
+    `;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function load(){
+    $("btnReload").disabled = true;
+    $("apiStatus").textContent = "...";
+    $("apiStatus").className = "status";
+
+    const region = $("region").value;
+    const daysOverdue = $("daysOverdue").value || "1";
+
+    const url = `${WORKER_BASE}/?` + qs({
+      action: "getLeadFunnel",
+      token: TOKEN,
+      region,
+      daysOverdue
+    });
+
+    try{
+      const res = await fetch(url, { method: "GET" });
+      const data = await res.json();
+
+      if (!data || data.ok !== true) {
+        $("apiStatus").textContent = "NOT OK";
+        $("apiStatus").classList.add("bad");
+        $("raw").textContent = JSON.stringify(data, null, 2);
+        $("btnReload").disabled = false;
+        return;
       }
-    }
 
-    loadData();
-  </script>
+      $("apiStatus").textContent = "OK";
+      $("apiStatus").classList.add("ok");
+
+      $("kpiTotal").textContent = fmt(data.total);
+      $("kpiOverdue").textContent = fmt(data.overdue);
+      $("kpiActive").textContent = fmt((data.byStatus||{})["Active customer"]);
+      $("kpiSaleVerify").textContent = fmt((data.byStatus||{})["Sale Verify"]);
+
+      $("tblStatus").innerHTML = dictToRows(data.byStatus);
+      $("tblSource").innerHTML = dictToRows(data.bySource);
+
+      $("raw").textContent = JSON.stringify(data, null, 2);
+    } catch(err){
+      $("apiStatus").textContent = "ERROR";
+      $("apiStatus").classList.add("bad");
+      $("raw").textContent = String(err);
+    } finally {
+      $("btnReload").disabled = false;
+    }
+  }
+
+  $("btnReload").addEventListener("click", load);
+  load();
+</script>
 </body>
 </html>
