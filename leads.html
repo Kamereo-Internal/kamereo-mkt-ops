@@ -6,7 +6,6 @@
   <title>Leads</title>
   <style>
     body{font-family:system-ui;margin:24px}
-    code{background:#f3f3f3;padding:2px 6px;border-radius:6px}
     pre{background:#f3f3f3;padding:12px;border-radius:10px;overflow:auto}
   </style>
 </head>
@@ -16,30 +15,31 @@
   <pre id="out">(empty)</pre>
 
   <script>
-    // DÁN WEB APP URL ở đây sau khi deploy Apps Script
-    const API_BASE = "https://weathered-credit-61cd.huy-ngo.workers.dev/";
+    const API_BASE = "https://weathered-credit-61cd.huy-ngo.workers.dev";
 
-    async function ping() {
+    (async () => {
+      const statusEl = document.getElementById("status");
+      const outEl = document.getElementById("out");
+
       try {
-        const res = await fetch(API_BASE + "?action=ping", { method: "GET" });
+        const url = API_BASE + "/?action=ping&ts=" + Date.now(); // cache-bust
+        const res = await fetch(url, { method: "GET" });
         const text = await res.text();
-        document.getElementById("out").textContent = text;
 
-        // nếu là JSON thì parse để hiển thị đẹp
+        outEl.textContent = text;
+
         try {
           const json = JSON.parse(text);
-          document.getElementById("out").textContent = JSON.stringify(json, null, 2);
-          document.getElementById("status").textContent = json.ok ? "OK" : "NOT OK";
+          outEl.textContent = JSON.stringify(json, null, 2);
+          statusEl.textContent = json.ok ? "OK" : "NOT OK";
         } catch {
-          document.getElementById("status").textContent = res.ok ? "OK (non-JSON)" : "ERROR";
+          statusEl.textContent = res.ok ? "OK (non-JSON)" : "ERROR";
         }
       } catch (e) {
-        document.getElementById("status").textContent = "ERROR";
-        document.getElementById("out").textContent = String(e);
+        statusEl.textContent = "ERROR";
+        outEl.textContent = String(e);
       }
-    }
-
-    ping();
+    })();
   </script>
 </body>
 </html>
